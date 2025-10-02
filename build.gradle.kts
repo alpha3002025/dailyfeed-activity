@@ -30,10 +30,52 @@ allprojects{
 		mavenCentral()
 	}
 
+	val querydslVersion = "5.0.0:jakarta"
+	val mapstructVersion = "1.5.4.Final"
+
+	extra["springCloudVersion"] = "2025.0.0"
+
+	dependencyManagement {
+		imports {
+			mavenBom("org.springframework.cloud:spring-cloud-dependencies:${property("springCloudVersion")}")
+		}
+	}
+
 	dependencies {
+		implementation(project(":dailyfeed-code"))
+		implementation(project(":dailyfeed-kafka-support"))
+		implementation(project(":dailyfeed-redis-support"))
+
+		implementation("org.springframework.boot:spring-boot-starter-cache")
+		implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+		implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
 		implementation("org.springframework.boot:spring-boot-starter-web")
+
+		// kafka
+		implementation("org.springframework.kafka:spring-kafka")
+		testImplementation("org.springframework.kafka:spring-kafka-test")
+
+		// jakarta
+		annotationProcessor("jakarta.annotation:jakarta.annotation-api")
+		annotationProcessor("jakarta.persistence:jakarta.persistence-api")
+
+		// mapstruct
+		implementation("org.mapstruct:mapstruct:${mapstructVersion}")
+		annotationProcessor("org.mapstruct:mapstruct-processor:${mapstructVersion}")
+
+		// querydsl
+		implementation ("com.querydsl:querydsl-jpa:${querydslVersion}")
+		annotationProcessor("com.querydsl:querydsl-apt:${querydslVersion}")
+
+		// lombok
 		compileOnly("org.projectlombok:lombok")
 		annotationProcessor("org.projectlombok:lombok")
+
+		// database
+		runtimeOnly("com.h2database:h2")
+		runtimeOnly("com.mysql:mysql-connector-j")
+
+		// test
 		testImplementation("org.springframework.boot:spring-boot-starter-test")
 		testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 	}
