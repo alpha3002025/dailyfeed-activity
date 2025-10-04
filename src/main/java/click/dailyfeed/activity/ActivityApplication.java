@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 		"click.dailyfeed.activity",
 		"click.dailyfeed.redis",
 		"click.dailyfeed.kafka",
+		"click.dailyfeed.pagination",
 })
 public class ActivityApplication {
 
