@@ -1,1 +1,3 @@
-spring.application.name=activity
+spring:
+  application:
+    name: activity
