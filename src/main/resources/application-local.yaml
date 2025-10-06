@@ -154,9 +154,9 @@ infrastructure:
       database: dailyfeed
   redis:
     event-queue:
-      post-activity-event:
-        list-key: POST_ACTIVITY_EVENT_HISTORY
-        dead-letter-list-key: POST_ACTIVITY_EVENT_HISTORY_DEAD
+      member-activity-event:
+        list-key: MEMBER_ACTIVITY_EVENT_HISTORY
+        dead-letter-list-key: MEMBER_ACTIVITY_EVENT_HISTORY_DEAD
         batch-size: 1000
   kafka:
     default:

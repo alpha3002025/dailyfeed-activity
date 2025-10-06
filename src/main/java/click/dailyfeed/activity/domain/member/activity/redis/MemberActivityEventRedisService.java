@@ -13,13 +13,13 @@ import java.util.List;
 @Service
 public class MemberActivityEventRedisService {
 
-    @Value("${infrastructure.redis.event-queue.post-activity-event.list-key}")
+    @Value("${infrastructure.redis.event-queue.member-activity-event.list-key}")
     private String redisKey;
 
-    @Value("${infrastructure.redis.event-queue.post-activity-event.dead-letter-list-key}")
+    @Value("${infrastructure.redis.event-queue.member-activity-event.dead-letter-list-key}")
     private String deadLetterKey;
 
-    @Value("${infrastructure.redis.event-queue.post-activity-event.batch-size}")
+    @Value("${infrastructure.redis.event-queue.member-activity-event.batch-size}")
     private Integer batchSize;
 
     @Qualifier("memberActivityTransportDtoRedisTemplate")
