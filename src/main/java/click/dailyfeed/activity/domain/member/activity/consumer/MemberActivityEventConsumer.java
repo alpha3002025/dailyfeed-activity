@@ -2,10 +2,12 @@ package click.dailyfeed.activity.domain.member.activity.consumer;
 
 import click.dailyfeed.activity.domain.member.activity.document.MemberActivityDocument;
 import click.dailyfeed.activity.domain.member.activity.mapper.MemberActivityMapper;
+import click.dailyfeed.activity.domain.member.activity.redis.KafkaMessageKeyMemberActivityRedisService;
 import click.dailyfeed.activity.domain.member.activity.redis.MemberActivityEventRedisService;
 import click.dailyfeed.activity.domain.member.activity.repository.mongo.MemberActivityMongoRepository;
 import click.dailyfeed.code.domain.activity.transport.MemberActivityTransportDto;
 import click.dailyfeed.code.global.kafka.type.DateBasedTopicType;
+import click.dailyfeed.code.global.redis.RedisKeyExistPredicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -27,8 +30,11 @@ import java.util.List;
 @Component
 public class MemberActivityEventConsumer {
     private final MemberActivityEventRedisService memberActivityEventRedisService;
+    private final KafkaMessageKeyMemberActivityRedisService kafkaMessageKeyMemberActivityRedisService;
     private final MemberActivityMapper memberActivityMapper;
     private final MemberActivityMongoRepository memberActivityMongoRepository;
+
+    private final Duration KAFKA_LISTENER_TTL = Duration.ofSeconds(30);
 
     @KafkaListener(
             topicPattern = DateBasedTopicType.MEMBER_ACTIVITY_PATTERN,
@@ -40,11 +46,16 @@ public class MemberActivityEventConsumer {
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
+            @Header(value = KafkaHeaders.RECEIVED_KEY, required = false) String messageKey,
             Acknowledgment acknowledgment) {
 
         // 오프셋 및 이벤트 정보 로깅
-        log.debug("📨 Consuming message - Topic: {}, Partition: {}, Offset: {}, PostId: {}, EventType: {}",
-                  topic, partition, offset, event.getPostId(), event.getMemberActivityType());
+        log.debug("📨 Consuming message - Topic: {}, Partition: {}, Offset: {}, MessageKey: {}, PostId: {}, EventType: {}",
+                  topic, partition, offset, messageKey, event.getPostId(), event.getMemberActivityType());
+
+        if (RedisKeyExistPredicate.EXIST.equals(kafkaMessageKeyMemberActivityRedisService.checkExist(messageKey))) {
+            return;
+        }
 
         try {
             // 토픽명에서 날짜 추출
@@ -52,7 +63,7 @@ public class MemberActivityEventConsumer {
 
             // 이벤트 처리 (대기열에 저장)
             if (dateStr != null) {
-                processEvent(dateStr, event);
+                processEvent(dateStr, messageKey, event);
             }
 
             // 메시지 처리 성공 후 오프셋 커밋
@@ -67,10 +78,10 @@ public class MemberActivityEventConsumer {
         }
     }
 
-    public void processEvent(String dateStr, MemberActivityTransportDto.MemberActivityEvent event){
+    public void processEvent(String dateStr, String messageKey, MemberActivityTransportDto.MemberActivityEvent event){
         // 날짜 형식 검증 (yyyyMMdd 형식인지 확인)
         if (dateStr.matches("\\d{8}")) { // 날짜 타입 처리
-            processEventByDate(event, dateStr);
+            processEventByDate(messageKey, event, dateStr);
         }
         else{
             // 날짜 타입이 아닌 다른 타입의 토픽 분류
@@ -80,15 +91,15 @@ public class MemberActivityEventConsumer {
     /**
      * 날짜별 이벤트 처리
      */
-    private void processEventByDate(MemberActivityTransportDto.MemberActivityEvent event, String dateStr) {
+    private void processEventByDate(String messageKey, MemberActivityTransportDto.MemberActivityEvent event, String dateStr) {
         LocalDate eventDate = LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("yyyyMMdd"));
         LocalDate today = LocalDate.now();
 
         if (eventDate.equals(today)) {
-            cachingActivityEvent(event);
+            cachingActivityEvent(messageKey, event);
         } else if (eventDate.isBefore(today)) {
             if(eventDate.isAfter(today.minusDays(2))) {
-                cachingActivityEvent(event);
+                cachingActivityEvent(messageKey, event);
             }
             else{
                 // 접미사가 yyyyMMdd 형식이 아닌 다른 형식의 토픽일 경우 이곳에서 처리 (운영을 위한 특정 용도)
@@ -98,14 +109,15 @@ public class MemberActivityEventConsumer {
         }
     }
 
-    private void cachingActivityEvent(MemberActivityTransportDto.MemberActivityEvent event) {
+    private void cachingActivityEvent(String messageKey, MemberActivityTransportDto.MemberActivityEvent event) {
         // 1) Message read
         if (event == null) {
             return;
         }
-
         // 2) cache put
         memberActivityEventRedisService.rPushEvent(event);
+        // 3) caching 완료된 메시지 키 저장
+        kafkaMessageKeyMemberActivityRedisService.addAndExpireIn(messageKey, KAFKA_LISTENER_TTL);
     }
 
     @Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
