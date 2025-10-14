@@ -2,18 +2,21 @@ package click.dailyfeed.activity.domain.member.activity.redis;
 
 import click.dailyfeed.code.global.cache.RedisKeyPrefix;
 import click.dailyfeed.code.global.redis.RedisKeyExistPredicate;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 
-@RequiredArgsConstructor
 @Service
 public class KafkaMessageKeyMemberActivityRedisService {
-    @Qualifier("kafkaMessageKeyMemberActivityRedisTemplate")
     private final RedisTemplate<String, String> redisTemplate;
+
+    public KafkaMessageKeyMemberActivityRedisService(
+            @Qualifier("kafkaMessageKeyMemberActivityRedisTemplate") RedisTemplate<String, String> redisTemplate
+    ) {
+        this.redisTemplate = redisTemplate;
+    }
 
     public void addAndExpireIn(String messageKey, Duration expireIn) {
         String redisKey = redisKey(messageKey);
