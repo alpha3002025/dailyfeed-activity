@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @SpringBootApplication
 @ComponentScan(basePackages = {
 		"click.dailyfeed.activity",
+		"click.dailyfeed.pvc",
 		"click.dailyfeed.redis",
 		"click.dailyfeed.kafka",
 		"click.dailyfeed.pagination",
