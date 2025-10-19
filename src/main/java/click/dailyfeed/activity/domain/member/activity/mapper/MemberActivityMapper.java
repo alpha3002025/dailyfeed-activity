@@ -8,7 +8,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class MemberActivityMapper {
-    public MemberActivityDocument fromEvent(MemberActivityTransportDto.MemberActivityEvent event) {
+    public MemberActivityDocument fromEvent(MemberActivityTransportDto.MemberActivityMessage message) {
+        MemberActivityTransportDto.MemberActivityEvent event = message.getEvent();
         MemberActivityType memberActivityType = event.getMemberActivityType();
         if (MemberActivityType.postEventTypes.contains(memberActivityType)) {
             return MemberActivityDocument.ofNewPostActivity(
