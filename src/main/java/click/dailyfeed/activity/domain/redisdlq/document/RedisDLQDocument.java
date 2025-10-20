@@ -41,9 +41,9 @@ public class RedisDLQDocument {
         this.payload = payload;
     }
 
-    public static RedisDLQDocument newRedisDLQ(String redisKey, String payload) {
+    public static RedisDLQDocument newRedisDLQ(String messageKey, String payload) {
         return RedisDLQDocument.newRedisDLQBuilder()
-                .messageKey(redisKey)
+                .messageKey(messageKey)
                 .payload(payload)
                 .build();
     }
