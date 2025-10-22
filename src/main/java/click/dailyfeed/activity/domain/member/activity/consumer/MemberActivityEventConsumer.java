@@ -128,24 +128,23 @@ public class MemberActivityEventConsumer {
             MemberActivityDocument document = memberActivityMapper.fromMessage(message);
             memberActivityMongoRepository.save(document);
         } catch (Exception e) {
-            try{
+            DateTimeFormatter dateTimeFormatter = MemberActivityTransferDtoFactory.DATE_TIME_FORMATTER;
+            String toRestore = String.format("messageKey=%s$$$memberId=%s$$$postId=%s$$$commentId=%s$$$activityType=%s$$$createdAt=%s$$$updatedAt%s$$$",
+                    String.valueOf(messageKey), String.valueOf(event.getMemberId()), String.valueOf(event.getPostId()), String.valueOf(event.getCommentId()), event.getMemberActivityType().name(),
+                    event.getCreatedAt().format(dateTimeFormatter), event.getUpdatedAt().format(dateTimeFormatter));
+            try{ // deadletter 저장소에 저장
+                // object mapper 직렬화
                 String payload = objectMapper.writeValueAsString(message);
+
+                // deadletter 저장소에 저장 시도
                 try {
                     ListenerDeadLetterDocument deadLetter = ListenerDeadLetterDocument.newDeadLetter(messageKey, payload, event.getCreatedAt());
                     listenerDeadLetterRepository.save(deadLetter);
-                } catch (Exception e1){
-                    kafkaListenerFailureStorageService.store(ServiceType.MEMBER_ACTIVITY.name(), event.getMemberActivityType().getCode(), messageKey, payload);
+                } catch (Exception e1){ // deadletter 저장소에 저장 실패할 경우 PVC 로깅 기능을 활용
+                    log.error(toRestore); // TODO :: 특정 PVC 에 로깅하는 기능으로 대체 필요
                 }
-            } catch (Exception e2){
-                DateTimeFormatter dateTimeFormatter = MemberActivityTransferDtoFactory.DATE_TIME_FORMATTER;
-                String toRestore = String.format("messageKey=%s$$$memberId=%s$$$postId=%s$$$commentId=%s$$$activityType=%s$$$createdAt=%s$$$updatedAt%s$$$",
-                        String.valueOf(messageKey), String.valueOf(event.getMemberId()), String.valueOf(event.getPostId()), String.valueOf(event.getCommentId()), event.getMemberActivityType().name(),
-                        event.getCreatedAt().format(dateTimeFormatter), event.getUpdatedAt().format(dateTimeFormatter));
-                try {
-                    kafkaListenerFailureStorageService.store(ServiceType.MEMBER_ACTIVITY.name(), event.getMemberActivityType().getCode(), messageKey, toRestore);
-                } catch (IOException ex) {
-                    memberActivityEventRedisService.rPushDeadLetterEvent(List.of(message));
-                }
+            } catch (Exception e2){ // object mapper 를 이용해 객체 직렬화에 실패할 경우 (카프카 메시지 버전이 달라지는 케이스)
+                log.error(toRestore); // TODO :: 특정 PVC 에 로깅하는 기능으로 대체 필요
             }
         }
     }
