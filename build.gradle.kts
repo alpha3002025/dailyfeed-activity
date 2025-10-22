@@ -48,6 +48,7 @@ allprojects{
 		implementation(project(":dailyfeed-redis-support"))
 		implementation(project(":dailyfeed-pvc-support"))
 		implementation(project(":dailyfeed-pagination-support"))
+		implementation(project(":dailyfeed-deadletter-support"))
 
 		implementation("org.springframework.boot:spring-boot-starter-cache")
 		implementation("org.springframework.boot:spring-boot-starter-data-jpa")
