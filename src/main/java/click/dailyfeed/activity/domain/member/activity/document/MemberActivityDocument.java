@@ -65,6 +65,9 @@ public class MemberActivityDocument {
     @Field("comment_id")
     private Long commentId;
 
+    @Field("message_key")
+    private String messageKey;
+
     @Field("member_activity_type")
     private MemberActivityType memberActivityType;
 
@@ -91,31 +94,52 @@ public class MemberActivityDocument {
     }
 
     public MemberActivityDocument(
-            Long memberId, Long postId, Long commentId, MemberActivityType memberActivityType
+            Long memberId, Long postId, Long commentId, MemberActivityType memberActivityType, String messageKey
     ) {
         this.memberId = memberId;
         this.postId = postId;
         this.commentId = commentId;
         this.memberActivityType = memberActivityType;
+        this.messageKey = messageKey;
     }
 
     public static MemberActivityDocument ofNewPostActivity(Long memberId, Long postId, MemberActivityType memberActivityType){
-        return new MemberActivityDocument(memberId, postId, null, memberActivityType);
+        return new MemberActivityDocument(memberId, postId, null, memberActivityType, null);
+    }
+
+    public static MemberActivityDocument ofNewPostActivity(Long memberId, Long postId, MemberActivityType memberActivityType, String messageKey){
+        return new MemberActivityDocument(memberId, postId, null, memberActivityType, messageKey);
     }
 
     public static MemberActivityDocument ofNewCommentActivity(Long memberId, Long postId, Long commentId, MemberActivityType memberActivityType){
-        return new MemberActivityDocument(memberId, postId, commentId, memberActivityType);
+        return new MemberActivityDocument(memberId, postId, commentId, memberActivityType, null);
+    }
+
+    public static MemberActivityDocument ofNewCommentActivity(Long memberId, Long postId, Long commentId, MemberActivityType memberActivityType, String messageKey){
+        return new MemberActivityDocument(memberId, postId, commentId, memberActivityType, messageKey);
     }
 
     public static MemberActivityDocument ofNewMemberActivity(Long memberId, MemberActivityType memberActivityType){
-        return new MemberActivityDocument(memberId, null, null, memberActivityType);
+        return new MemberActivityDocument(memberId, null, null, memberActivityType, null);
+    }
+
+    public static MemberActivityDocument ofNewMemberActivity(Long memberId, MemberActivityType memberActivityType, String messageKey){
+        return new MemberActivityDocument(memberId, null, null, memberActivityType, messageKey);
     }
 
     public static MemberActivityDocument ofNewPostLikeActivity(Long memberId, Long postId, MemberActivityType memberActivityType){
-        return new MemberActivityDocument(memberId, postId, null, memberActivityType);
+        return new MemberActivityDocument(memberId, postId, null, memberActivityType, null);
+    }
+
+    public static MemberActivityDocument ofNewPostLikeActivity(Long memberId, Long postId, MemberActivityType memberActivityType, String messageKey){
+        return new MemberActivityDocument(memberId, postId, null, memberActivityType, messageKey);
     }
 
     public static MemberActivityDocument ofNewCommentLikeActivity(Long memberId, Long commentId, MemberActivityType memberActivityType){
-        return new MemberActivityDocument(memberId, null, commentId, memberActivityType);
+        return new MemberActivityDocument(memberId, null, commentId, memberActivityType, null);
+    }
+
+    public static MemberActivityDocument ofNewCommentLikeActivity(Long memberId, Long commentId, MemberActivityType memberActivityType, String messageKey){
+        return new MemberActivityDocument(memberId, null, commentId, memberActivityType, messageKey);
     }
 }

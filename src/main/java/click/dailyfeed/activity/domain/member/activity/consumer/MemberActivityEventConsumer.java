@@ -1,19 +1,20 @@
 package click.dailyfeed.activity.domain.member.activity.consumer;
 
-import click.dailyfeed.activity.domain.deadletters.document.ListenerDeadLetterDocument;
-import click.dailyfeed.activity.domain.deadletters.repository.mongo.ListenerDeadLetterRepository;
 import click.dailyfeed.activity.domain.member.activity.document.MemberActivityDocument;
 import click.dailyfeed.activity.domain.member.activity.mapper.MemberActivityMapper;
-import click.dailyfeed.code.domain.activity.factory.MemberActivityTransferDtoFactory;
-import click.dailyfeed.kafka.domain.activity.redis.KafkaMessageKeyMemberActivityRedisService;
-import click.dailyfeed.redis.global.deadletter.kafka.MemberActivityEventRedisService;
 import click.dailyfeed.activity.domain.member.activity.repository.mongo.MemberActivityMongoRepository;
+import click.dailyfeed.activity.domain.member.activity.repository.mongo.MemberActivityMongoTemplate;
+import click.dailyfeed.code.domain.activity.factory.MemberActivityTransferDtoFactory;
 import click.dailyfeed.code.domain.activity.transport.MemberActivityTransportDto;
+import click.dailyfeed.code.domain.activity.type.MemberActivityType;
 import click.dailyfeed.code.global.kafka.exception.KafkaNetworkErrorException;
 import click.dailyfeed.code.global.kafka.type.DateBasedTopicType;
-import click.dailyfeed.code.global.pvc.type.ServiceType;
 import click.dailyfeed.code.global.redis.RedisKeyExistPredicate;
-import click.dailyfeed.pvc.domain.kafka.service.KafkaListenerFailureStorageService;
+import click.dailyfeed.deadletter.domain.deadletter.document.KafkaListenerDeadLetterDocument;
+import click.dailyfeed.deadletter.domain.deadletter.repository.mongo.KafkaListenerDeadLetterMongoTemplate;
+import click.dailyfeed.deadletter.domain.deadletter.repository.mongo.KafkaListenerDeadLetterRepository;
+import click.dailyfeed.kafka.domain.activity.redis.KafkaMessageKeyMemberActivityRedisService;
+import click.dailyfeed.redis.global.deadletter.kafka.MemberActivityEventRedisService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -41,10 +41,11 @@ import java.util.List;
 public class MemberActivityEventConsumer {
     private final MemberActivityEventRedisService memberActivityEventRedisService;
     private final KafkaMessageKeyMemberActivityRedisService kafkaMessageKeyMemberActivityRedisService;
-    private final KafkaListenerFailureStorageService kafkaListenerFailureStorageService;
 
     private final MemberActivityMongoRepository memberActivityMongoRepository;
-    private final ListenerDeadLetterRepository listenerDeadLetterRepository;
+    private final KafkaListenerDeadLetterRepository kafkaListenerDeadLetterRepository;
+    private final MemberActivityMongoTemplate memberActivityMongoTemplate;
+    private final KafkaListenerDeadLetterMongoTemplate kafkaListenerDeadLetterMongoTemplate;
 
     private final MemberActivityMapper memberActivityMapper;
     private final ObjectMapper objectMapper;
@@ -123,10 +124,10 @@ public class MemberActivityEventConsumer {
     public void insertEvent(MemberActivityTransportDto.MemberActivityMessage message){
         final String messageKey = message.getKey();
         final MemberActivityTransportDto.MemberActivityEvent event = message.getEvent();
-        if(!listenerDeadLetterRepository.findByMessageKey(messageKey).isEmpty()) return; // 이미 데드레터에 담은 메시지
+        if(!kafkaListenerDeadLetterRepository.findByMessageKey(messageKey).isEmpty()) return; // 이미 데드레터에 담은 메시지
         try{
             MemberActivityDocument document = memberActivityMapper.fromMessage(message);
-            memberActivityMongoRepository.save(document);
+            memberActivityMongoTemplate.upsertMemberActivity(document);
         } catch (Exception e) {
             DateTimeFormatter dateTimeFormatter = MemberActivityTransferDtoFactory.DATE_TIME_FORMATTER;
             String toRestore = String.format("messageKey=%s$$$memberId=%s$$$postId=%s$$$commentId=%s$$$activityType=%s$$$createdAt=%s$$$updatedAt%s$$$",
@@ -138,8 +139,9 @@ public class MemberActivityEventConsumer {
 
                 // deadletter 저장소에 저장 시도
                 try {
-                    ListenerDeadLetterDocument deadLetter = ListenerDeadLetterDocument.newDeadLetter(messageKey, payload, event.getCreatedAt());
-                    listenerDeadLetterRepository.save(deadLetter);
+                    MemberActivityType.Category category = MemberActivityType.resolveCategory(event.getMemberActivityType());
+                    KafkaListenerDeadLetterDocument document = KafkaListenerDeadLetterDocument.newDeadLetter(messageKey, payload, category);
+                    kafkaListenerDeadLetterMongoTemplate.upsertKafkaListenerDeadLetter(document);
                 } catch (Exception e1){ // deadletter 저장소에 저장 실패할 경우 PVC 로깅 기능을 활용
                     log.error(toRestore); // TODO :: 특정 PVC 에 로깅하는 기능으로 대체 필요
                 }
@@ -198,24 +200,17 @@ public class MemberActivityEventConsumer {
 
     public void handleListenException(MemberActivityTransportDto.MemberActivityMessage message){
         final String messageKey = message.getKey();
-        if(!listenerDeadLetterRepository.findByMessageKey(messageKey).isEmpty()) return; // 이미 데드레터에 담은 메시지
+        if(!kafkaListenerDeadLetterRepository.findByMessageKey(messageKey).isEmpty()) return; // 이미 데드레터에 담은 메시지
 
         MemberActivityTransportDto.MemberActivityEvent event = message.getEvent();
         try{
             String payload = objectMapper.writeValueAsString(message);
             try {
-                ListenerDeadLetterDocument deadLetter = ListenerDeadLetterDocument.newDeadLetter(messageKey, payload, event.getCreatedAt());
-                listenerDeadLetterRepository.save(deadLetter);
-            }
-            catch (Exception e) {
-                try{
-                    kafkaListenerFailureStorageService.store(ServiceType.MEMBER_ACTIVITY.name(), event.getMemberActivityType().getCode(), messageKey, payload);
-                }
-                catch (Exception finalException){
-                    // PVC 저장까지 실패할 경우 트랜잭션을 실패시키는 것으로 처리
-                    // 여기까지 실패할 경우 'member-activity-yyyyMMdd 토픽을 전일자 토픽으로 돌면서 후보정 서비스에서 처리하도록 익셉션을 내고 그대로 둔다.
-                    throw new KafkaNetworkErrorException();
-                }
+                MemberActivityType.Category category = MemberActivityType.resolveCategory(event.getMemberActivityType());
+                KafkaListenerDeadLetterDocument document = KafkaListenerDeadLetterDocument.newDeadLetter(messageKey, payload, category);
+                kafkaListenerDeadLetterMongoTemplate.upsertKafkaListenerDeadLetter(document);
+            } catch (Exception e){
+                log.error("");
             }
         }
         catch (JsonProcessingException e){
