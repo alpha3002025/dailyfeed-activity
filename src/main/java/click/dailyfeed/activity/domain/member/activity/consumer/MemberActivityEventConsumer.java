@@ -4,8 +4,9 @@ import click.dailyfeed.activity.domain.deadletters.document.ListenerDeadLetterDo
 import click.dailyfeed.activity.domain.deadletters.repository.mongo.ListenerDeadLetterRepository;
 import click.dailyfeed.activity.domain.member.activity.document.MemberActivityDocument;
 import click.dailyfeed.activity.domain.member.activity.mapper.MemberActivityMapper;
+import click.dailyfeed.code.domain.activity.factory.MemberActivityTransferDtoFactory;
 import click.dailyfeed.kafka.domain.activity.redis.KafkaMessageKeyMemberActivityRedisService;
-import click.dailyfeed.kafka.domain.activity.redis.MemberActivityEventRedisService;
+import click.dailyfeed.redis.global.deadletter.kafka.MemberActivityEventRedisService;
 import click.dailyfeed.activity.domain.member.activity.repository.mongo.MemberActivityMongoRepository;
 import click.dailyfeed.code.domain.activity.transport.MemberActivityTransportDto;
 import click.dailyfeed.code.global.kafka.exception.KafkaNetworkErrorException;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -104,10 +106,10 @@ public class MemberActivityEventConsumer {
         LocalDate today = LocalDate.now();
 
         if (eventDate.equals(today)) {
-            cachingActivityEvent(message);
+            insertEvent(message);
         } else if (eventDate.isBefore(today)) { // 시차로 인해 오늘에서 내일로 넘어가는 케이스
             if(eventDate.isAfter(today.minusDays(2))) {
-                cachingActivityEvent(message);
+                insertEvent(message);
             }
             else{
                 // 접미사가 yyyyMMdd 형식이 아닌 다른 형식의 토픽일 경우 이곳에서 처리 (운영을 위한 특정 용도)
@@ -117,7 +119,39 @@ public class MemberActivityEventConsumer {
         }
     }
 
-    private void cachingActivityEvent(MemberActivityTransportDto.MemberActivityMessage message) {
+    @Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+    public void insertEvent(MemberActivityTransportDto.MemberActivityMessage message){
+        final String messageKey = message.getKey();
+        final MemberActivityTransportDto.MemberActivityEvent event = message.getEvent();
+        if(!listenerDeadLetterRepository.findByMessageKey(messageKey).isEmpty()) return; // 이미 데드레터에 담은 메시지
+        try{
+            MemberActivityDocument document = memberActivityMapper.fromMessage(message);
+            memberActivityMongoRepository.save(document);
+        } catch (Exception e) {
+            try{
+                String payload = objectMapper.writeValueAsString(message);
+                try {
+                    ListenerDeadLetterDocument deadLetter = ListenerDeadLetterDocument.newDeadLetter(messageKey, payload, event.getCreatedAt());
+                    listenerDeadLetterRepository.save(deadLetter);
+                } catch (Exception e1){
+                    kafkaListenerFailureStorageService.store(ServiceType.MEMBER_ACTIVITY.name(), event.getMemberActivityType().getCode(), messageKey, payload);
+                }
+            } catch (Exception e2){
+                DateTimeFormatter dateTimeFormatter = MemberActivityTransferDtoFactory.DATE_TIME_FORMATTER;
+                String toRestore = String.format("messageKey=%s$$$memberId=%s$$$postId=%s$$$commentId=%s$$$activityType=%s$$$createdAt=%s$$$updatedAt%s$$$",
+                        String.valueOf(messageKey), String.valueOf(event.getMemberId()), String.valueOf(event.getPostId()), String.valueOf(event.getCommentId()), event.getMemberActivityType().name(),
+                        event.getCreatedAt().format(dateTimeFormatter), event.getUpdatedAt().format(dateTimeFormatter));
+                try {
+                    kafkaListenerFailureStorageService.store(ServiceType.MEMBER_ACTIVITY.name(), event.getMemberActivityType().getCode(), messageKey, toRestore);
+                } catch (IOException ex) {
+                    memberActivityEventRedisService.rPushDeadLetterEvent(List.of(message));
+                }
+            }
+        }
+    }
+
+    /// scheduled 기반
+    private void processLazy(MemberActivityTransportDto.MemberActivityMessage message) {
         // 1) Message read
         if (message == null) {
             return;
@@ -144,7 +178,7 @@ public class MemberActivityEventConsumer {
                 log.info("📦 Processing batch #{} - size: {}", ++processedBatches, eventList.size());
                 List<MemberActivityDocument> list = eventList
                         .stream()
-                        .map(memberActivityMapper::fromEvent)
+                        .map(memberActivityMapper::fromMessage)
                         .toList();
 
                 // MongoDB 저장

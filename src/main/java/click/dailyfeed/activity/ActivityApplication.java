@@ -11,7 +11,10 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @EnableScheduling
 @EnableMongoAuditing
 @EnableMongoRepositories(
-		basePackages = "click.dailyfeed.activity.domain.**.repository.mongo",
+		basePackages = {
+				"click.dailyfeed.activity.domain.**.repository.mongo",
+				"click.dailyfeed.deadletter.domain.**.repository.mongo"
+		},
 		mongoTemplateRef = "mongoTemplate"
 )
 @EnableTransactionManagement
@@ -23,6 +26,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 		"click.dailyfeed.redis",
 		"click.dailyfeed.kafka",
 		"click.dailyfeed.pagination",
+		"click.dailyfeed.deadletter",
 })
 public class ActivityApplication {
 
