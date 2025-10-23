@@ -46,7 +46,6 @@ allprojects{
 		implementation(project(":dailyfeed-feign"))
 		implementation(project(":dailyfeed-kafka-support"))
 		implementation(project(":dailyfeed-redis-support"))
-		implementation(project(":dailyfeed-pvc-support"))
 		implementation(project(":dailyfeed-pagination-support"))
 		implementation(project(":dailyfeed-deadletter-support"))
 
