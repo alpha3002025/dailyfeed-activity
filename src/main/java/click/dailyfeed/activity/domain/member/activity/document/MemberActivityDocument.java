@@ -82,12 +82,13 @@ public class MemberActivityDocument {
 
     @PersistenceCreator
     public MemberActivityDocument(
-            ObjectId id, Long memberId, Long postId, Long commentId, MemberActivityType memberActivityType, LocalDateTime createdAt, LocalDateTime updatedAt
+            ObjectId id, Long memberId, Long postId, Long commentId, String messageKey, MemberActivityType memberActivityType, LocalDateTime createdAt, LocalDateTime updatedAt
     ) {
         this.id = id;
         this.memberId = memberId;
         this.postId = postId;
         this.commentId = commentId;
+        this.messageKey = messageKey;
         this.memberActivityType = memberActivityType;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
