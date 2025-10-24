@@ -88,6 +88,8 @@ public class MemberActivityEventConsumer {
                 processEventByDate(message, dateStr);
                 // 메시지 처리 성공 후 오프셋 커밋
                 acknowledgment.acknowledge();
+
+                kafkaMessageKeyMemberActivityRedisService.addAndExpireIn(message.getKey(), KAFKA_LISTENER_TTL);
                 log.debug("✅ Offset committed - Topic: {}, Partition: {}, Offset: {}", topic, partition, offset);
             }
 
