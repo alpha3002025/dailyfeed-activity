@@ -54,6 +54,10 @@ allprojects{
 		implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
 		implementation("org.springframework.boot:spring-boot-starter-data-redis")
 		implementation("org.springframework.boot:spring-boot-starter-web")
+		implementation("org.springframework.boot:spring-boot-starter-actuator")
+
+		// micrometer & prometheus
+		runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
 		// kafka
 		implementation("org.springframework.kafka:spring-kafka")
