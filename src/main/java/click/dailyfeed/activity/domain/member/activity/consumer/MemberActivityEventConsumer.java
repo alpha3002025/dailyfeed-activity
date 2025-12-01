@@ -71,6 +71,8 @@ public class MemberActivityEventConsumer {
 
         // Exactly Once 를 Off 해두었기에 중복메시지 수신 가능, 중복메시지 여부 체크
         if (RedisKeyExistPredicate.EXIST.equals(kafkaMessageKeyMemberActivityRedisService.checkExist(messageKey))) {
+            // 이미 중복 수신된 메시지더라도 중복 커밋을 수행하도록 지정 (컨슈머 재시작 또는 리밸런싱 수행시 이미 중복이어서 무시한 코드가 다시 들어올 수 있는 가능성에대한 처리 코드)
+            acknowledgment.acknowledge();
             return;
         }
 
